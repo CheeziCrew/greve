@@ -1,0 +1,19 @@
+openapi: 3.0.1
+info:
+  title: api-alpha
+  version: "2.1"
+paths:
+  /{municipalityId}/things:
+    get:
+      operationId: getThings
+      summary: List all things
+      tags: [Things]
+    post:
+      operationId: createThing
+      summary: Create a thing
+      tags: [Things]
+  /{municipalityId}/things/{id}:
+    get:
+      operationId: getThing
+      summary: Fetch one thing
+      tags: [Things]

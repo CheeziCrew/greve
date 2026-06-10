@@ -1,0 +1,176 @@
+{
+  "root": "testdata/repos",
+  "services": [
+    {
+      "name": "api-service-alpha",
+      "short_name": "alpha",
+      "path": "testdata/repos/api-service-alpha",
+      "group_id": "se.sundsvall",
+      "artifact_id": "api-service-alpha",
+      "version": "2.1",
+      "dept44_parent": "8.0.7",
+      "description": "Manages alpha things for the municipality and notifies beta-ray when they change.",
+      "api": {
+        "title": "api-alpha",
+        "version": "2.1",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/{municipalityId}/things",
+            "operation_id": "getThings",
+            "summary": "List all things",
+            "tags": [
+              "Things"
+            ]
+          },
+          {
+            "method": "POST",
+            "path": "/{municipalityId}/things",
+            "operation_id": "createThing",
+            "summary": "Create a thing",
+            "tags": [
+              "Things"
+            ]
+          },
+          {
+            "method": "GET",
+            "path": "/{municipalityId}/things/{id}",
+            "operation_id": "getThing",
+            "summary": "Fetch one thing",
+            "tags": [
+              "Things"
+            ]
+          }
+        ]
+      },
+      "spec_path": "src/main/resources/api/openapi.yaml",
+      "dependencies": [
+        {
+          "group_id": "se.sundsvall.dept44",
+          "artifact_id": "dept44-starter-feign"
+        },
+        {
+          "group_id": "se.sundsvall.dept44",
+          "artifact_id": "dept44-starter-scheduler"
+        },
+        {
+          "group_id": "org.springframework.boot",
+          "artifact_id": "spring-boot-starter-data-jpa"
+        },
+        {
+          "group_id": "org.mariadb.jdbc",
+          "artifact_id": "mariadb-java-client"
+        },
+        {
+          "group_id": "org.apache.commons",
+          "artifact_id": "commons-text",
+          "version": "1.12.0"
+        },
+        {
+          "group_id": "se.sundsvall.dept44",
+          "artifact_id": "dept44-starter-test",
+          "scope": "test"
+        }
+      ],
+      "integrations": [
+        {
+          "name": "beta-ray",
+          "resolved_to": "api-service-beta-ray",
+          "sources": [
+            "application.yml",
+            "integrations/beta-ray-1.0.yml",
+            "pom:inputSpec"
+          ]
+        },
+        {
+          "name": "lantmateriet",
+          "sources": [
+            "application.yml"
+          ]
+        }
+      ],
+      "consumed_by": [],
+      "uses_database": true,
+      "database_kind": "mariadb",
+      "uses_scheduler": true
+    },
+    {
+      "name": "api-service-beta-ray",
+      "short_name": "beta-ray",
+      "path": "testdata/repos/api-service-beta-ray",
+      "group_id": "se.sundsvall",
+      "artifact_id": "api-service-beta-ray",
+      "version": "1.0",
+      "dept44_parent": "8.0.5",
+      "description": "api-beta-ray",
+      "api": {
+        "title": "api-beta-ray",
+        "version": "1.0",
+        "endpoints": [
+          {
+            "method": "GET",
+            "path": "/{municipalityId}/rays",
+            "operation_id": "getRays",
+            "summary": "List rays",
+            "tags": [
+              "Rays"
+            ]
+          }
+        ]
+      },
+      "spec_path": "src/test/resources/api/openapi.yml",
+      "dependencies": [
+        {
+          "group_id": "se.sundsvall.dept44",
+          "artifact_id": "dept44-starter-webclient"
+        }
+      ],
+      "integrations": [],
+      "consumed_by": [
+        "api-service-alpha",
+        "api-service-gamma"
+      ],
+      "uses_database": false,
+      "uses_scheduler": false
+    },
+    {
+      "name": "api-service-gamma",
+      "short_name": "gamma",
+      "path": "testdata/repos/api-service-gamma",
+      "group_id": "se.sundsvall",
+      "artifact_id": "api-service-gamma",
+      "version": "3.0",
+      "dept44_parent": "8.0.7",
+      "dependencies": [
+        {
+          "group_id": "se.sundsvall.dept44",
+          "artifact_id": "dept44-starter-feign"
+        }
+      ],
+      "integrations": [
+        {
+          "name": "betaray",
+          "resolved_to": "api-service-beta-ray",
+          "sources": [
+            "integrations/betaray-v2.yaml",
+            "pom:inputSpec"
+          ]
+        },
+        {
+          "name": "delta-api",
+          "sources": [
+            "integrations/delta-api-2.0.yml",
+            "pom:inputSpec"
+          ]
+        }
+      ],
+      "consumed_by": [],
+      "uses_database": false,
+      "uses_scheduler": false
+    }
+  ],
+  "external": [
+    "delta-api",
+    "lantmateriet"
+  ]
+}

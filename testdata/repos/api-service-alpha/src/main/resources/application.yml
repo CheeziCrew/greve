@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: api-alpha
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+integration:
+  beta-ray:
+    base-url: http://localhost:9090
+    oauth2:
+      token-url: http://localhost:9090/token
+  lantmateriet:
+    base-url: https://api.lantmateriet.se
+scheduler:
+  cleanup:
+    cron: 0 0 2 * * *

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>se.sundsvall.dept44</groupId>
+		<artifactId>dept44-service-parent</artifactId>
+		<version>8.0.5</version>
+	</parent>
+	<groupId>se.sundsvall</groupId>
+	<artifactId>api-service-beta-ray</artifactId>
+	<version>1.0</version>
+	<name>api-service-beta-ray</name>
+	<dependencies>
+		<dependency>
+			<groupId>se.sundsvall.dept44</groupId>
+			<artifactId>dept44-starter-webclient</artifactId>
+		</dependency>
+	</dependencies>
+</project>
