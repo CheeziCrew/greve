@@ -1,7 +1,7 @@
 openapi: 3.0.1
 info:
   title: api-beta-ray
-  version: "1.0"
+  version: "3.0"
 paths:
   /{municipalityId}/rays:
     get:

@@ -47,6 +47,26 @@ func BuildCLI() *cobra.Command {
 	root.AddCommand(exportCmd())
 	root.AddCommand(mcpCmd())
 	root.AddCommand(githubCmd())
+	// Impact pack
+	root.AddCommand(schemaCmd())
+	root.AddCommand(impactCmd())
+	root.AddCommand(staleCmd())
+	root.AddCommand(consistencyCmd())
+	root.AddCommand(exampleCmd())
+	// Ops pack
+	root.AddCommand(dbCmd())
+	root.AddCommand(configCmd())
+	root.AddCommand(jobsCmd())
+	root.AddCommand(resilienceCmd())
+	// Agent pack
+	root.AddCommand(coverageCmd())
+	root.AddCommand(patternsCmd())
+	root.AddCommand(packCmd())
+	// Fleet pack
+	root.AddCommand(activityCmd())
+	root.AddCommand(searchConfigCmd())
+	root.AddCommand(pathCmd())
+	root.AddCommand(fleetCmd())
 
 	return root
 }

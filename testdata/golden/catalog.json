@@ -92,7 +92,14 @@
       "consumed_by": [],
       "uses_database": true,
       "database_kind": "mariadb",
-      "uses_scheduler": true
+      "uses_scheduler": true,
+      "owners": [
+        "@CheeziCrew/team-alpha",
+        "@cheezi"
+      ],
+      "workflows": [
+        "maven_ci.yml"
+      ]
     },
     {
       "name": "api-service-beta-ray",
@@ -105,7 +112,7 @@
       "description": "api-beta-ray",
       "api": {
         "title": "api-beta-ray",
-        "version": "1.0",
+        "version": "3.0",
         "endpoints": [
           {
             "method": "GET",

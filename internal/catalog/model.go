@@ -40,6 +40,9 @@ type Service struct {
 	DatabaseKind  string `json:"database_kind,omitempty"`
 	UsesScheduler bool   `json:"uses_scheduler"`
 
+	Owners    []string `json:"owners,omitempty"`    // from CODEOWNERS
+	Workflows []string `json:"workflows,omitempty"` // .github/workflows filenames
+
 	GitHub *RepoStatus `json:"github,omitempty"`
 }
 

@@ -152,3 +152,9 @@ func (c *Catalog) Lookup(name string) *Service {
 	}
 	return nil
 }
+
+// ResolveIntegration maps an integration name (e.g. a Feign config key) to a
+// local service using the same rules as the build-time edge resolution.
+func (c *Catalog) ResolveIntegration(name string) *Service {
+	return c.resolve(name, nil)
+}

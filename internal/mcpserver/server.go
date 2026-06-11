@@ -34,8 +34,12 @@ func Run(ctx context.Context, root string, aliases map[string]string, orgs []str
 		return err
 	}
 
-	impl := mcp.NewServer(&mcp.Implementation{Name: "greve", Version: "0.1.0"}, nil)
+	impl := mcp.NewServer(&mcp.Implementation{Name: "greve", Version: "0.2.0"}, nil)
 	s.addTools(impl)
+	s.addImpactTools(impl)
+	s.addOpsTools(impl)
+	s.addAgentTools(impl)
+	s.addFleetTools(impl)
 	return impl.Run(ctx, &mcp.StdioTransport{})
 }
 

@@ -76,6 +76,8 @@ func scanRepo(repoPath, name string) (catalog.Service, bool) {
 
 	service.RepoURL, service.Org = gitRemote(repoPath)
 	service.Description = readmeDescription(repoPath)
+	service.Owners = codeOwners(repoPath)
+	service.Workflows = workflowNames(repoPath)
 
 	if specPath := findSpec(repoPath); specPath != "" {
 		if api, err := parseSpec(filepath.Join(repoPath, filepath.FromSlash(specPath))); err == nil {

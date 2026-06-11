@@ -19,6 +19,8 @@ go install github.com/CheeziCrew/greve@latest
 
 ## CLI
 
+Catalogue:
+
 ```sh
 greve services [--query q] [--uses artifactId] [--db] [--scheduler] [--org x]
 greve service <name>              # fuzzy: citizen / api-service-citizen both work
@@ -31,6 +33,42 @@ greve github [--refresh] [--all]  # org repos vs local clones (needs gh)
 greve mcp                         # serve the catalogue over MCP stdio
 ```
 
+Impact (integration copilot):
+
+```sh
+greve schema <service> <METHOD> <path|operationId>   # resolved request/response schema
+greve impact <service> --method POST --path /x       # who breaks if this changes
+greve stale [provider] [--all]    # vendored client specs behind the provider
+greve consistency [service]       # feign vs yml vs vendored specs vs pom drift
+greve example <provider> [--consumer name]           # real client code from a consumer
+```
+
+Ops:
+
+```sh
+greve db <service> [--history]    # tables from Flyway migrations
+greve config <service>            # env vars / deploy checklist
+greve jobs [service]              # cron inventory (yml + @Dept44Scheduled)
+greve resilience [service]        # timeouts + circuit breakers per edge
+```
+
+Agent grounding:
+
+```sh
+greve coverage <service>          # IT suites, scenarios, covered integrations
+greve patterns <type>             # real examples: scheduler|feign|validator|apptest|mapper|resource|entity
+greve pack <service>              # compact markdown context card
+```
+
+Fleet:
+
+```sh
+greve activity [service]          # branches, last commit, staleness
+greve search-config <query> [--keys]   # grep all application*.yml
+greve path <from> <to>            # shortest call chain between services
+greve fleet                       # landscape health overview
+```
+
 Every command takes `--json` for machine-readable output and `--root` to
 point somewhere other than `~/Code/scit`.
 
@@ -40,9 +78,15 @@ point somewhere other than `~/Code/scit`.
 claude mcp add --scope user greve -- greve mcp
 ```
 
-Tools: `list_services`, `get_service`, `service_graph`, `search_endpoints`,
-`dependency_versions`, `github_overview`, `refresh_catalog`. The server
-rescans automatically when the catalogue is older than five minutes.
+23 tools mirroring the CLI: `list_services`, `get_service`, `service_graph`,
+`search_endpoints`, `dependency_versions`, `github_overview`,
+`refresh_catalog`, `endpoint_schema`, `impact_analysis`, `stale_clients`,
+`integration_consistency`, `usage_examples`, `db_schema`, `config_surface`,
+`scheduler_jobs`, `resilience_report`, `test_coverage`, `pattern_examples`,
+`context_pack`, `git_activity`, `search_config`, `path_between`,
+`fleet_report`. The server rescans automatically when the catalogue is older
+than five minutes. Heavy extractors (Flyway, Feign, spec resolution, git)
+run lazily per query — the base scan stays sub-second.
 
 ## Config (optional)
 

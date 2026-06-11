@@ -76,11 +76,15 @@ func renderMarkdown(c *catalog.Catalog) string {
 
 		if len(s.Integrations) > 0 {
 			var calls []string
+			seen := map[string]bool{}
 			for _, integration := range s.Integrations {
-				if integration.ResolvedTo != "" {
-					calls = append(calls, integration.ResolvedTo)
-				} else {
-					calls = append(calls, integration.Name+" (external)")
+				target := integration.ResolvedTo
+				if target == "" {
+					target = integration.Name + " (external)"
+				}
+				if !seen[target] {
+					seen[target] = true
+					calls = append(calls, target)
 				}
 			}
 			fmt.Fprintf(&b, "- **Calls:** %s\n", strings.Join(calls, ", "))
