@@ -47,7 +47,7 @@ func FindFeignClients(repoPath string) []FeignClient {
 				continue
 			}
 
-			client := FeignClient{Package: filepath.Base(dir)}
+			client := FeignClient{Package: packageNameFor(dir)}
 			client.ClientFile = relOrSelf(repoPath, full)
 			if m := configKeyRe.FindSubmatch(data); m != nil {
 				client.ConfigKey = string(m[1])
@@ -61,22 +61,39 @@ func FindFeignClients(repoPath string) []FeignClient {
 	return clients
 }
 
-// findIntegrationDirs returns leaf package dirs under any **/integration/
-// directory in src/main/java.
+// findIntegrationDirs returns candidate client package dirs: sub-packages
+// under an integration/ dir (classic dept44 layout, integration/party/) and
+// dirs named integration themselves (Spring Modulith layout, where clients
+// live directly in <module>/integration/).
 func findIntegrationDirs(repoPath string) []string {
-	var dirs []string
+	dirSet := map[string]bool{}
 	src := filepath.Join(repoPath, "src", "main", "java")
 	_ = filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || !d.IsDir() {
 			return nil
 		}
-		if filepath.Base(filepath.Dir(path)) == "integration" {
-			dirs = append(dirs, path)
+		if filepath.Base(filepath.Dir(path)) == "integration" || filepath.Base(path) == "integration" {
+			dirSet[path] = true
 		}
 		return nil
 	})
+	dirs := make([]string, 0, len(dirSet))
+	for dir := range dirSet {
+		dirs = append(dirs, dir)
+	}
 	sort.Strings(dirs)
 	return dirs
+}
+
+// packageNameFor labels a client package: the dir name in the classic
+// layout (integration/party -> "party"), the module name in the modulith
+// layout (operaton/integration -> "operaton").
+func packageNameFor(dir string) string {
+	base := filepath.Base(dir)
+	if base == "integration" {
+		return filepath.Base(filepath.Dir(dir))
+	}
+	return base
 }
 
 // attachCompanions finds the properties/configuration classes next to a
