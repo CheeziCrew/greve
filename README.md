@@ -69,6 +69,30 @@ greve path <from> <to>            # shortest call chain between services
 greve fleet                       # landscape health overview
 ```
 
+Review robot (local pre-commit linter + convention rulebook):
+
+```sh
+greve review <service> [--changed --base main]   # deterministic dept44 convention linter; exits 1 on errors
+greve review <service> --install-hook            # local, uncommitted .git/hooks/pre-push that runs it
+greve standards [category] [--file path]         # the convention rulebook (baseline + mined)
+greve mine-reviews [--repos o/n,...] [--max-prs-per-repo N] [--resume]   # mine PR review comments
+```
+
+`greve review` is a local gate only — it never touches CI, the Maven build, or
+GitHub. It flags lexical conventions the build and SonarCloud don't: ternaries,
+missing `{Resource}FailureTest`, missing `@CircuitBreaker`, Lombok,
+`org.zalando.problem` imports, enums in `api/model`, `@Scheduled` vs
+`@Dept44Scheduled`, field injection, non-static-imported `HttpStatus`. Errors
+exit non-zero; warnings advise. Disable/retune rules per repo via an
+(uncommitted) `.greve-review.yml`.
+
+`greve standards` serves a rulebook distilled from CLAUDE.md + the pattern files
+(embedded baseline) merged with any mined override at
+`<UserConfigDir>/greve/standards-corpus.json`. `greve mine-reviews` populates
+that pipeline: it pulls human PR review comments via `gh` GraphQL into
+`~/Library/Caches/greve/reviews.ndjson` (bot/noise filtered, resumable,
+deduped); a Claude Workflow then distils them into the override greve serves.
+
 Every command takes `--json` for machine-readable output and `--root` to
 point somewhere other than `~/Code/scit`.
 
@@ -78,13 +102,24 @@ point somewhere other than `~/Code/scit`.
 claude mcp add --scope user greve -- greve mcp
 ```
 
-23 tools mirroring the CLI: `list_services`, `get_service`, `service_graph`,
+Or, inside Sundsvalls kommun, install the `greve` plugin from the
+[Sundsvallskommun/claude-plugins](https://github.com/Sundsvallskommun/claude-plugins)
+marketplace — it registers the MCP server, adds a `/greve:review` command and a
+usage skill (the binary still has to be installed as above):
+
+```
+/plugin marketplace add Sundsvallskommun/claude-plugins
+/plugin install greve@sundsvall-claude-plugins
+```
+
+26 tools mirroring the CLI: `list_services`, `get_service`, `service_graph`,
 `search_endpoints`, `dependency_versions`, `github_overview`,
 `refresh_catalog`, `endpoint_schema`, `impact_analysis`, `stale_clients`,
 `integration_consistency`, `usage_examples`, `db_schema`, `config_surface`,
 `scheduler_jobs`, `resilience_report`, `test_coverage`, `pattern_examples`,
 `context_pack`, `git_activity`, `search_config`, `path_between`,
-`fleet_report`. The server rescans automatically when the catalogue is older
+`fleet_report`, `review_diff`, `convention_rules`, `standards_for_file`. The
+server rescans automatically when the catalogue is older
 than five minutes. Heavy extractors (Flyway, Feign, spec resolution, git)
 run lazily per query — the base scan stays sub-second.
 
