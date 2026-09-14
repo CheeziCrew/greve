@@ -110,7 +110,7 @@ func (s *server) addImpactTools(impl *mcp.Server) {
 
 	mcp.AddTool(impl, &mcp.Tool{
 		Name:        "integration_consistency",
-		Description: "Integration drift per service: Feign clients without yml config, yml config without a Feign client (may be WebClient — heuristic), vendored specs not wired into the pom.",
+		Description: "Integration drift per service: Feign clients without yml config, yml config without a Feign client (may be WebClient — heuristic), vendored specs not wired into the pom, and broken routes (Feign calls whose path the resolved provider no longer serves in its OpenAPI spec).",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, in consistencyIn) (*mcp.CallToolResult, consistencyOut, error) {
 		c := s.current()
 		var out consistencyOut
@@ -124,7 +124,7 @@ func (s *server) addImpactTools(impl *mcp.Server) {
 		}
 		for i := range c.Services {
 			report := insight.CheckConsistency(c, &c.Services[i])
-			if len(report.ClientWithoutConfig)+len(report.ConfigWithoutClient)+len(report.SpecWithoutPom) > 0 {
+			if report.HasDrift() {
 				out.Reports = append(out.Reports, report)
 			}
 		}

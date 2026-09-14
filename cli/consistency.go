@@ -37,7 +37,7 @@ func consistencyCmd() *cobra.Command {
 			var reports []insight.ConsistencyReport
 			for _, s := range targets {
 				report := insight.CheckConsistency(c, s)
-				if len(report.ClientWithoutConfig)+len(report.ConfigWithoutClient)+len(report.SpecWithoutPom) > 0 {
+				if report.HasDrift() {
 					reports = append(reports, report)
 				}
 			}
@@ -50,6 +50,9 @@ func consistencyCmd() *cobra.Command {
 				printDrift("  client without yml config:", r.ClientWithoutConfig)
 				printDrift("  yml config without client:", r.ConfigWithoutClient)
 				printDrift("  vendored spec not in pom: ", r.SpecWithoutPom)
+				for _, u := range r.UnreachableCalls {
+					fmt.Printf("  broken route: %s %s → %s (not served by %s)\n", u.Method, u.Path, u.Provider, u.Provider)
+				}
 			}
 			fmt.Printf("\n%d services with drift (config-without-client may just mean WebClient instead of Feign)\n", len(reports))
 			return nil

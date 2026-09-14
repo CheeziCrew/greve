@@ -33,11 +33,24 @@ func Build(root string, services []Service, aliases map[string]string) *Catalog 
 		byNorm:      map[string]*Service{},
 	}
 
+	// Name first, unconditionally: the directory name is unique, so it is the
+	// authoritative key. ShortName and ArtifactID only fill gaps — they must
+	// not clobber another service's Name (e.g. archived api-service-operaton-old
+	// keeps artifactId api-service-operaton and would otherwise shadow the live
+	// reactor).
 	for i := range c.Services {
 		s := &c.Services[i]
-		for _, key := range []string{s.Name, s.ShortName, s.ArtifactID} {
+		if n := Normalize(s.Name); n != "" {
+			c.byNorm[n] = s
+		}
+	}
+	for i := range c.Services {
+		s := &c.Services[i]
+		for _, key := range []string{s.ShortName, s.ArtifactID} {
 			if n := Normalize(key); n != "" {
-				c.byNorm[n] = s
+				if _, taken := c.byNorm[n]; !taken {
+					c.byNorm[n] = s
+				}
 			}
 		}
 	}
