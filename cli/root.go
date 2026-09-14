@@ -62,6 +62,10 @@ func BuildCLI() *cobra.Command {
 	root.AddCommand(coverageCmd())
 	root.AddCommand(patternsCmd())
 	root.AddCommand(packCmd())
+	// Review pack
+	root.AddCommand(reviewCmd())
+	root.AddCommand(standardsCmd())
+	root.AddCommand(mineReviewsCmd())
 	// Fleet pack
 	root.AddCommand(activityCmd())
 	root.AddCommand(searchConfigCmd())

@@ -1,0 +1,445 @@
+{
+  "rules": [
+    {
+      "id": "err-problem-dept44",
+      "category": "general",
+      "statement": "Use se.sundsvall.dept44.problem.Problem for errors; never import org.zalando.problem.*",
+      "rationale": "Zalando Problem is not on the classpath in dept44 8+. Problem.valueOf(HttpStatus, detail) returns dept44 ThrowableProblem whose status is Spring HttpStatus.",
+      "bad_example": "import org.zalando.problem.Problem;",
+      "good_example": "import se.sundsvall.dept44.problem.Problem; throw Problem.valueOf(NOT_FOUND, \"errand %s not found\".formatted(id));",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "no-zalando-problem"
+    },
+    {
+      "id": "imports-explicit",
+      "category": "general",
+      "statement": "Always use explicit imports — never wildcard imports",
+      "bad_example": "import java.util.*;",
+      "good_example": "import java.util.List;\nimport java.util.Map;",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "no-wildcard-import"
+    },
+    {
+      "id": "static-import-constants",
+      "category": "general",
+      "statement": "Static-import enums and constants — write NOT_FOUND, not HttpStatus.NOT_FOUND",
+      "good_example": "import static org.springframework.http.HttpStatus.NOT_FOUND;",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "unqualified-constant"
+    },
+    {
+      "id": "static-import-assertions",
+      "category": "general",
+      "statement": "Static-import AssertJ helpers (assertThat, tuple, …) — write assertThat(...) / tuple(...), never the full org.assertj.core.api.Assertions / org.assertj.core.groups.Tuple package path",
+      "rationale": "AssertJ's Assertions.assertThat is always static-imported. It only gets fully-qualified to dodge the name clash with Hamcrest's MatcherAssert.assertThat (used by the BeanMatchers testBean check). Resolve the clash the other way: static-import AssertJ (the frequently-used one, bare assertThat) and class-import Hamcrest (import org.hamcrest.MatcherAssert) so the single bean check reads MatcherAssert.assertThat — never the full org.hamcrest.MatcherAssert.assertThat package path.",
+      "bad_example": "import static org.hamcrest.MatcherAssert.assertThat;\norg.assertj.core.api.Assertions.assertThat(request.getSource()).isEqualTo(\"LIFECARE\");",
+      "good_example": "import static org.assertj.core.api.Assertions.assertThat;\nimport org.hamcrest.MatcherAssert;\nassertThat(request.getSource()).isEqualTo(\"LIFECARE\");\n// bean test: MatcherAssert.assertThat(Foo.class, allOf(hasValidGettersAndSetters()));",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "static-import-assertj"
+    },
+    {
+      "id": "entity-column-length",
+      "category": "entity",
+      "statement": "Entity @Column(length) must match the column size in the Flyway migration",
+      "rationale": "If the JPA entity (and its @Size-validated API model) allow a longer string than the migration's varchar(N), a value that passes bean validation is truncated/rejected at insert (HTTP 500). The migration column and the entity @Column(length) must agree. Caught a real regression where errand_document.document_type was varchar(64) while the entity/@Size allowed 255.",
+      "bad_example": "// entity: @Column(name=\"document_type\", length=255)  // migration: document_type varchar(64)",
+      "good_example": "// entity: @Column(name=\"document_type\", length=255)  // migration: document_type varchar(255)",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "entity-column-length-mismatch"
+    },
+    {
+      "id": "no-lombok",
+      "category": "general",
+      "statement": "No Lombok — write getters, setters, constructors, and builders explicitly",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "no-lombok"
+    },
+    {
+      "id": "no-ternary",
+      "category": "general",
+      "statement": "No ternary operator (?:) — use if/else, a helper method, or Optional",
+      "rationale": "Team standard: ternaries are banned outright in scit/dept44 Java.",
+      "bad_example": "return value == null ? \"\" : value.trim();",
+      "good_example": "return Optional.ofNullable(value).map(String::trim).orElse(\"\");",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "no-ternary"
+    },
+    {
+      "id": "optional-over-null",
+      "category": "general",
+      "statement": "Prefer Optional over null checks and ternaries for nullable handling",
+      "good_example": "Optional.ofNullable(x).map(Foo::bar).ifPresent(this::use);",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "final-variables",
+      "category": "general",
+      "statement": "Variables and dependencies should be final whenever possible",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "method-references",
+      "category": "general",
+      "statement": "Prefer method references over lambdas: .map(Mapper::toEntity), not .map(e -> toEntity(e))",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "unused-lambda-param-underscore",
+      "category": "general",
+      "statement": "Unused lambda parameters must be _ (Java 22+ unnamed variables): (root, _, cb) -> ...",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "constructor-injection",
+      "category": "service",
+      "statement": "Constructor injection with final dependencies — no @Autowired field/setter injection",
+      "bad_example": "@Autowired private FooService foo;",
+      "good_example": "private final FooService foo;\nDemoService(FooService foo) { this.foo = foo; }",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "no-field-injection"
+    },
+    {
+      "id": "service-problem-errors",
+      "category": "service",
+      "statement": "Throw Problem.valueOf(HttpStatus, detail) for errors; messages as constants with %s placeholders",
+      "good_example": "private static final String ERRAND_NOT_FOUND = \"errand %s not found\";\nthrow Problem.valueOf(NOT_FOUND, ERRAND_NOT_FOUND.formatted(id));",
+      "source": "pattern-service.md",
+      "deterministic": false
+    },
+    {
+      "id": "service-batch-error-names-missing",
+      "category": "service",
+      "statement": "Batch-lookup errors must name the missing subset, not report a generic 'none found'",
+      "source": "pattern-service.md",
+      "deterministic": false
+    },
+    {
+      "id": "service-no-dead-public-methods",
+      "category": "service",
+      "statement": "No unused public methods — keep the service surface to what is actually called",
+      "source": "pattern-service.md",
+      "deterministic": false
+    },
+    {
+      "id": "resource-thin",
+      "category": "resource",
+      "statement": "Resources are thin: no business logic, delegate to the service layer",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "resource-package-private",
+      "category": "resource",
+      "statement": "Resource classes are package-private (drop 'public')",
+      "bad_example": "public class DemoResource {",
+      "good_example": "class DemoResource {",
+      "source": "pattern-resource.md",
+      "deterministic": true,
+      "linter_rule_id": "no-public-resource"
+    },
+    {
+      "id": "resource-naming",
+      "category": "resource",
+      "statement": "REST controllers live in api/ and are named {Entity}Resource, not {Entity}Controller",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "no-controller-naming"
+    },
+    {
+      "id": "resource-municipality-id",
+      "category": "resource",
+      "statement": "API paths include the municipalityId path parameter: /{municipalityId}/...",
+      "rationale": "Municipality id 2281 is Sundsvall; never hardcode it.",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "pathvariable-name",
+      "category": "resource",
+      "statement": "No redundant @PathVariable name — rely on the parameter name (compiled with -parameters)",
+      "bad_example": "@PathVariable(\"municipalityId\") final String municipalityId",
+      "good_example": "@PathVariable final String municipalityId",
+      "source": "pattern-resource.md",
+      "deterministic": true,
+      "linter_rule_id": "pathvariable-redundant-name"
+    },
+    {
+      "id": "test-resource-failuretest",
+      "category": "resource",
+      "statement": "Each Resource needs two test classes: {Resource}Test (happy path) + {Resource}FailureTest (validation)",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "missing-failure-test"
+    },
+    {
+      "id": "api-no-enums",
+      "category": "pojo",
+      "statement": "No enums in the API model layer — use String + @MemberOf(MyEnum.class) / @OneOf and @Schema(allowableValues=...)",
+      "bad_example": "public enum Status { OPEN, CLOSED }",
+      "good_example": "@MemberOf(Status.class) @Schema(allowableValues = {\"OPEN\", \"CLOSED\"}) String status;",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "no-enum-in-api-model"
+    },
+    {
+      "id": "pojo-shape",
+      "category": "pojo",
+      "statement": "API models: static create() factory, with*() fluent setters, manual equals/hashCode/toString; records for simple immutable DTOs",
+      "source": "pattern-pojo.md",
+      "deterministic": false
+    },
+    {
+      "id": "pojo-datetime-format",
+      "category": "pojo",
+      "statement": "Annotate OffsetDateTime fields with @DateTimeFormat(iso = DATE_TIME)",
+      "source": "pattern-pojo.md",
+      "deterministic": false
+    },
+    {
+      "id": "pojo-bean-tests",
+      "category": "pojo",
+      "statement": "POJO tests: testBean() (BeanMatchers/Hamcrest), testBuilderMethods(), testNoDirtOnCreatedBean()",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "entity-enumerated-string",
+      "category": "entity",
+      "statement": "Entity enum fields use @Enumerated(EnumType.STRING) — store as varchar, never ordinal int",
+      "bad_example": "@Enumerated\nprivate Status status;",
+      "good_example": "@Enumerated(EnumType.STRING)\nprivate Status status;",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "enumerated-string"
+    },
+    {
+      "id": "entity-uuid-id",
+      "category": "entity",
+      "statement": "String id with @UuidGenerator; @Column(name = snake_case) with explicit nullable/length",
+      "source": "pattern-entity.md",
+      "deterministic": false
+    },
+    {
+      "id": "entity-timezone-normalize",
+      "category": "entity",
+      "statement": "OffsetDateTime entity fields use @TimeZoneStorage(NORMALIZE)",
+      "source": "pattern-entity.md",
+      "deterministic": false
+    },
+    {
+      "id": "entity-column-lengths",
+      "category": "entity",
+      "statement": "Set column lengths in the entity (they flow into schema.sql); keep them consistent across like fields",
+      "source": "pattern-entity.md",
+      "deterministic": false
+    },
+    {
+      "id": "resilience-circuitbreaker",
+      "category": "integration",
+      "statement": "All Feign clients and Spring Data repositories require @CircuitBreaker",
+      "good_example": "@CircuitBreaker(name = \"partyClient\")\n@FeignClient(name = \"party\", ...)",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "circuitbreaker-on-feign"
+    },
+    {
+      "id": "integration-feign-config",
+      "category": "integration",
+      "statement": "@FeignClient(name = CLIENT_ID); Properties as a record with @ConfigurationProperties; error decoder + retry interceptor; request timeouts",
+      "source": "pattern-integration.md",
+      "deterministic": false
+    },
+    {
+      "id": "integration-no-payload-logging",
+      "category": "integration",
+      "statement": "Never log SSBTEK payloads or personnummer/income data — keep payload logging disabled",
+      "rationale": "Sensitive personal data; financial-aid already disables payload logging.",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "mapper-static-nullsafe",
+      "category": "mapper",
+      "statement": "Mappers are static utility classes with a private constructor, null-safe via ofNullable()/emptyList()",
+      "good_example": "public final class DemoMapper { private DemoMapper() {} static DemoEntity toEntity(Demo d) { ... } }",
+      "source": "pattern-mapper.md",
+      "deterministic": false
+    },
+    {
+      "id": "mapper-method-naming",
+      "category": "mapper",
+      "statement": "Mapper method names: to{Target}, to{Target}Entity, to{Target}List, updateEntity",
+      "source": "pattern-mapper.md",
+      "deterministic": false
+    },
+    {
+      "id": "scheduler-dept44scheduled",
+      "category": "scheduler",
+      "statement": "Schedulers use @Dept44Scheduled, not Spring's @Scheduled",
+      "bad_example": "@Scheduled(cron = \"...\")",
+      "good_example": "@Dept44Scheduled(name = \"...\", cron = \"...\", lockAtMostFor = \"...\")",
+      "source": "CLAUDE.md",
+      "deterministic": true,
+      "linter_rule_id": "no-spring-scheduled"
+    },
+    {
+      "id": "scheduler-worker-health",
+      "category": "scheduler",
+      "statement": "Scheduler delegates to a {Job}Worker; reports health via Dept44HealthUtility; per-item error handling",
+      "source": "pattern-scheduler.md",
+      "deterministic": false
+    },
+    {
+      "id": "apptest-structure",
+      "category": "apptest",
+      "statement": "AppTests extend AbstractAppTest with @WireMockAppTestSuite; fluent setupCall() chain; test method naming test01_, test02_",
+      "source": "pattern-apptest.md",
+      "deterministic": false
+    },
+    {
+      "id": "apptest-url-safe-invalids",
+      "category": "apptest",
+      "statement": "Use URL-safe invalid values in failure tests — never '#' (fragment delimiter truncates the path silently)",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "coverage-gate",
+      "category": "general",
+      "statement": "85% line + 85% branch coverage (JaCoCo) — builds fail below this",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "openapi-in-sync",
+      "category": "resource",
+      "statement": "Keep openapi.yml in sync with the Resource; don't add endpoints without updating the spec; no enums leak into the generated model",
+      "source": "CLAUDE.md",
+      "deterministic": false
+    },
+    {
+      "id": "validation-string-memberof",
+      "category": "validation",
+      "statement": "Validate string-typed enum fields with @MemberOf/@OneOf; custom validators in api/validation with impls in api/validation/impl",
+      "source": "pattern-validator.md",
+      "deterministic": false
+    },
+    {
+      "id": "mined-tolist",
+      "category": "mapper",
+      "statement": "Use .toList() instead of .collect(Collectors.toList()) (note it returns an immutable list); hoist constant expressions into static final fields",
+      "bad_example": "stream.collect(Collectors.toList())",
+      "good_example": "stream.toList()",
+      "frequency": 4,
+      "source": "pr-mining",
+      "deterministic": true,
+      "linter_rule_id": "prefer-tolist"
+    },
+    {
+      "id": "mined-spring-transactional",
+      "category": "repository",
+      "statement": "Prefer Spring's org.springframework.transaction.annotation.Transactional over the Jakarta variant, used consistently across the service",
+      "bad_example": "import jakarta.transaction.Transactional;",
+      "good_example": "import org.springframework.transaction.annotation.Transactional;",
+      "frequency": 6,
+      "source": "pr-mining",
+      "deterministic": true,
+      "linter_rule_id": "no-jakarta-transactional"
+    },
+    {
+      "id": "mined-no-swagger-on-feign",
+      "category": "integration",
+      "statement": "Don't put Swagger/OpenAPI annotations on Feign client interfaces — they produce no docs; those belong on REST controllers",
+      "frequency": 3,
+      "source": "pr-mining",
+      "deterministic": true,
+      "linter_rule_id": "no-swagger-on-feign"
+    },
+    {
+      "id": "mined-serializable-needs-reason",
+      "category": "entity",
+      "statement": "Don't declare entities Serializable without a reason; if Serializable is required, declare a serialVersionUID",
+      "good_example": "private static final long serialVersionUID = 1L;",
+      "frequency": 7,
+      "source": "pr-mining",
+      "deterministic": true,
+      "linter_rule_id": "serializable-needs-serialversionuid"
+    },
+    {
+      "id": "mined-entity-suffix",
+      "category": "entity",
+      "statement": "Suffix JPA entity classes (and their tests) with 'Entity' to express purpose",
+      "bad_example": "@Entity\npublic class Errand { ... }",
+      "good_example": "@Entity\npublic class ErrandEntity { ... }",
+      "frequency": 8,
+      "source": "pr-mining",
+      "deterministic": true,
+      "linter_rule_id": "entity-suffix"
+    },
+    {
+      "id": "mined-entity-equals-hashcode",
+      "category": "entity",
+      "statement": "JPA entities implement equals & hashCode (identity/business-key based) — BeanMatchers testBean expects them and collections/dedup rely on them",
+      "frequency": 2,
+      "source": "pr-mining",
+      "deterministic": true,
+      "linter_rule_id": "entity-equals-hashcode"
+    },
+    {
+      "id": "mined-deleteall-not-foreach",
+      "category": "repository",
+      "statement": "Use repository.deleteAll(entities) instead of entities.forEach(repo::delete) — one call, still per-entity through the persistence context so cascade = ALL fires and no blob is orphaned",
+      "bad_example": "found.forEach(repository::delete);",
+      "good_example": "repository.deleteAll(found);",
+      "frequency": 1,
+      "source": "pr-mining",
+      "deterministic": true,
+      "linter_rule_id": "deleteall-not-foreach"
+    },
+    {
+      "id": "mined-no-nested-collections",
+      "category": "pojo",
+      "statement": "Avoid List<List<X>> and other raw nested collections in models; wrap the inner list in a named type (e.g. FormSnapshotGroup) so the shape is workable and extensible",
+      "bad_example": "List<List<FormSnapshotField>> groups;",
+      "good_example": "List<FormSnapshotGroup> groups;",
+      "frequency": 1,
+      "source": "pr-mining",
+      "deterministic": true,
+      "linter_rule_id": "no-nested-collections"
+    },
+    {
+      "id": "mined-schema-required-mode",
+      "category": "pojo",
+      "statement": "Use @Schema(requiredMode = REQUIRED) on mandatory fields (not the deprecated required=) with matching @NotBlank/@NotNull constraints",
+      "bad_example": "@Schema(description = \"…\", required = true)",
+      "good_example": "@Schema(description = \"…\", requiredMode = Schema.RequiredMode.REQUIRED)",
+      "frequency": 8,
+      "source": "pr-mining",
+      "deterministic": true,
+      "linter_rule_id": "schema-required-mode"
+    },
+    {
+      "id": "mined-test-class-singular",
+      "category": "apptest",
+      "statement": "Name test classes with the singular 'Test' suffix (not 'Tests'), in camelCase methods without a redundant 'test_' prefix, and name the class after the class it actually exercises",
+      "bad_example": "class ErrandServiceTests { ... }",
+      "good_example": "class ErrandServiceTest { ... }",
+      "frequency": 5,
+      "source": "pr-mining",
+      "deterministic": true,
+      "linter_rule_id": "test-class-plural-suffix"
+    }
+  ]
+}

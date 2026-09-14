@@ -40,6 +40,8 @@ func Run(ctx context.Context, root string, aliases map[string]string, orgs []str
 	s.addOpsTools(impl)
 	s.addAgentTools(impl)
 	s.addFleetTools(impl)
+	s.addReviewTools(impl)
+	s.addStandardsTools(impl)
 	return impl.Run(ctx, &mcp.StdioTransport{})
 }
 
