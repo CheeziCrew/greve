@@ -6,16 +6,22 @@ import (
 
 	"github.com/CheeziCrew/greve/internal/catalog"
 	"github.com/CheeziCrew/greve/internal/scan"
+	"github.com/CheeziCrew/greve/internal/testfixtures"
 )
 
 func fixtureCatalog(t *testing.T) *catalog.Catalog {
 	t.Helper()
-	root := filepath.Join("..", "..", "testdata", "repos")
-	services, err := scan.Scan(root)
+	root := t.TempDir()
+	if err := testfixtures.Materialize(filepath.Join("..", "..", "testdata", "repos"), root); err != nil {
+		t.Fatalf("materialize fixtures: %v", err)
+	}
+	services, nonRepos, err := scan.Scan(root)
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}
-	return catalog.Build(root, services, nil)
+	c := catalog.Build(root, services, nil)
+	c.NotRepositories = nonRepos
+	return c
 }
 
 func TestStaleClientsFixture(t *testing.T) {

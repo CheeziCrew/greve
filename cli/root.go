@@ -71,6 +71,7 @@ func BuildCLI() *cobra.Command {
 	root.AddCommand(searchConfigCmd())
 	root.AddCommand(pathCmd())
 	root.AddCommand(fleetCmd())
+	root.AddCommand(driftCmd())
 
 	return root
 }
@@ -129,11 +130,13 @@ func loadCatalog() (*catalog.Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	services, err := scan.Scan(root)
+	services, nonRepos, err := scan.Scan(root)
 	if err != nil {
 		return nil, fmt.Errorf("scanning %s: %w", root, err)
 	}
-	return catalog.Build(root, services, loadConfig().Aliases), nil
+	c := catalog.Build(root, services, loadConfig().Aliases)
+	c.NotRepositories = nonRepos
+	return c, nil
 }
 
 func printJSON(v any) error {

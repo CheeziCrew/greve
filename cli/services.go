@@ -44,6 +44,8 @@ func servicesCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("\n%d services\n", len(services))
+			warnNotRepositories(c)
+			warnDrift(c)
 			return nil
 		},
 	}
@@ -114,6 +116,27 @@ func serviceCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// warnNotRepositories reports pom directories that were skipped because they
+// are not git repositories. Goes to stderr so stdout stays pipeable.
+func warnNotRepositories(c *catalog.Catalog) {
+	if len(c.NotRepositories) == 0 {
+		return
+	}
+	names := make([]string, 0, len(c.NotRepositories))
+	for _, n := range c.NotRepositories {
+		names = append(names, n.Name)
+	}
+	fmt.Fprintf(os.Stderr, "note: %d pom director%s skipped (not a git repository): %s\n",
+		len(names), plural(len(names), "y", "ies"), strings.Join(names, ", "))
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 func yesNo(b bool) string {

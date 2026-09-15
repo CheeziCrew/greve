@@ -4,6 +4,7 @@ package scan
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -19,15 +20,20 @@ const apiServicePrefix = "api-service-"
 
 // Scan walks the direct children of root and returns every repo whose
 // pom.xml declares the dept44 service parent, sorted by name.
-func Scan(root string) ([]catalog.Service, error) {
+//
+// A directory that declares the parent but is not a git repository is not a
+// service — it is a stray working copy. Those are returned separately rather
+// than counted, so they cannot inflate the fleet's totals.
+func Scan(root string) ([]catalog.Service, []catalog.NonRepo, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var (
 		mu       sync.Mutex
 		services []catalog.Service
+		nonRepos []catalog.NonRepo
 	)
 	var group errgroup.Group
 	group.SetLimit(16)
@@ -43,6 +49,16 @@ func Scan(root string) ([]catalog.Service, error) {
 			if !ok {
 				return nil
 			}
+			if !isGitRepository(repoPath) {
+				mu.Lock()
+				nonRepos = append(nonRepos, catalog.NonRepo{
+					Name:   name,
+					Path:   repoPath,
+					Reason: "no .git — not a git repository",
+				})
+				mu.Unlock()
+				return nil
+			}
 			mu.Lock()
 			services = append(services, service)
 			mu.Unlock()
@@ -50,11 +66,66 @@ func Scan(root string) ([]catalog.Service, error) {
 		})
 	}
 	if err := group.Wait(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	sort.Slice(services, func(i, j int) bool { return services[i].Name < services[j].Name })
-	return services, nil
+	sort.Slice(nonRepos, func(i, j int) bool { return nonRepos[i].Name < nonRepos[j].Name })
+
+	resolveOriginParents(services)
+	return services, nonRepos, nil
+}
+
+// resolveOriginParents makes Dept44Parent mean "what origin says", not "what
+// happens to be checked out". Origin is the truth: a clone parked on a feature
+// branch or simply behind will otherwise report a version the service left
+// months ago, and greve is used to decide what work remains.
+//
+// Only repos that can actually differ are touched. A clone sitting on its
+// default branch at origin's sha has origin's files already, so most of the
+// fleet costs nothing here.
+func resolveOriginParents(services []catalog.Service) {
+	var group errgroup.Group
+	group.SetLimit(16)
+
+	for i := range services {
+		s := &services[i]
+		if s.Git.InSyncWithOrigin() {
+			s.Git.OriginVerified = true
+			continue
+		}
+		if s.Git.OriginSHA == "" {
+			continue // nothing to compare against: no origin ref for the default branch
+		}
+		group.Go(func() error {
+			data, err := exec.Command("git", "-C", s.Path, "show",
+				"origin/"+s.Git.DefaultBranch+":pom.xml").Output()
+			if err != nil {
+				return nil // leave the worktree value, unverified
+			}
+			pom, err := parsePomBytes(data)
+			if err != nil || pom.parentVersion == "" {
+				return nil
+			}
+			s.Git.OriginVerified = true
+			if pom.parentVersion != s.Dept44Parent {
+				s.Git.WorktreeParent = s.Dept44Parent
+				s.Dept44Parent = pom.parentVersion
+			}
+			return nil
+		})
+	}
+	_ = group.Wait()
+}
+
+// isGitRepository reports whether repoPath has a .git entry. That entry is a
+// directory in a normal clone and a file in a linked worktree; both count.
+//
+// Deliberately not keyed on the origin remote: a freshly `git init`ed service
+// that has never been pushed has no remote, and it is still a real repo.
+func isGitRepository(repoPath string) bool {
+	_, err := os.Stat(filepath.Join(repoPath, ".git"))
+	return err == nil
 }
 
 func scanRepo(repoPath, name string) (catalog.Service, bool) {
@@ -74,6 +145,7 @@ func scanRepo(repoPath, name string) (catalog.Service, bool) {
 		Dependencies: pom.dependencies,
 	}
 
+	service.Git = readGitState(repoPath)
 	service.RepoURL, service.Org = gitRemote(repoPath)
 	service.Description = readmeDescription(repoPath)
 	service.Owners = codeOwners(repoPath)

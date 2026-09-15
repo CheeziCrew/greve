@@ -47,6 +47,7 @@ func depsCmd() *cobra.Command {
 				fmt.Printf("  %s ×%d", v, counts[v])
 			}
 			fmt.Println()
+			warnDrift(c)
 			return nil
 		},
 	}

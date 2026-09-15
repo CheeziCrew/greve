@@ -46,11 +46,12 @@ func Run(ctx context.Context, root string, aliases map[string]string, orgs []str
 }
 
 func (s *server) rescan() (*catalog.Catalog, error) {
-	services, err := scan.Scan(s.root)
+	services, nonRepos, err := scan.Scan(s.root)
 	if err != nil {
 		return nil, err
 	}
 	c := catalog.Build(s.root, services, s.aliases)
+	c.NotRepositories = nonRepos
 	s.mu.Lock()
 	s.catalog = c
 	s.mu.Unlock()

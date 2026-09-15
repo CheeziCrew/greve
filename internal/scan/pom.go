@@ -54,7 +54,12 @@ func parsePom(path string) (*pomInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parsePomBytes(data)
+}
 
+// parsePomBytes parses a pom that did not come from a file — e.g. the copy on
+// origin/<default>, read via git show.
+func parsePomBytes(data []byte) (*pomInfo, error) {
 	var pom pomFile
 	if err := xml.Unmarshal(data, &pom); err != nil {
 		return nil, err

@@ -12,8 +12,21 @@ type Catalog struct {
 	// External lists integration names that resolved to no local repo
 	// (third-party systems, services not cloned), sorted and deduplicated.
 	External []string `json:"external"`
+	// NotRepositories lists directories that look like dept44 services but
+	// are not git repositories, so they are excluded from Services. They are
+	// reported rather than dropped silently: a stray working folder that
+	// shadows a live service is worth seeing.
+	NotRepositories []NonRepo `json:"not_repositories,omitempty"`
 
 	byNorm map[string]*Service
+}
+
+// NonRepo is a directory whose pom.xml declares the dept44 service parent
+// but which is not a git repository, so it is not a service.
+type NonRepo struct {
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
 }
 
 // Service is one dept44 microservice repo.
@@ -44,7 +57,43 @@ type Service struct {
 	Workflows []string `json:"workflows,omitempty"` // .github/workflows filenames
 
 	GitHub *RepoStatus `json:"github,omitempty"`
+
+	// Git describes where the local clone sits relative to origin. Machine
+	// consumers get this unconditionally — a stale number that looks current
+	// is how a fleet sweep gets sent to investigate finished work.
+	Git GitState `json:"git_state"`
 }
+
+// GitState is the local clone's position relative to origin, read from .git
+// without executing git or touching the network.
+type GitState struct {
+	Branch        string `json:"branch,omitempty"` // empty when detached
+	DefaultBranch string `json:"default_branch,omitempty"`
+	Detached      bool   `json:"detached,omitempty"`
+	HeadSHA       string `json:"head_sha,omitempty"`
+	OriginSHA     string `json:"origin_sha,omitempty"`
+	// LastFetch is zero when unknown, which never means fresh.
+	LastFetch time.Time `json:"last_fetch,omitzero"`
+
+	// WorktreeParent is the dept44 parent version in the checked-out pom,
+	// set only when it differs from the authoritative Dept44Parent.
+	WorktreeParent string `json:"worktree_parent,omitempty"`
+	// OriginVerified is true when Dept44Parent was read from
+	// origin/<default> rather than assumed from the worktree.
+	OriginVerified bool `json:"origin_verified,omitempty"`
+}
+
+// InSyncWithOrigin reports whether the checkout provably matches
+// origin/<default>, in which case the worktree's files are origin's files.
+func (g GitState) InSyncWithOrigin() bool {
+	if g.Detached || g.Branch == "" || g.Branch != g.DefaultBranch {
+		return false
+	}
+	return g.HeadSHA != "" && g.HeadSHA == g.OriginSHA
+}
+
+// Drifted reports whether this clone can misrepresent the service.
+func (g GitState) Drifted() bool { return !g.InSyncWithOrigin() }
 
 // APIInfo is the subset of the service's own OpenAPI spec we index.
 type APIInfo struct {

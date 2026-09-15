@@ -141,6 +141,8 @@ func fleetCmd() *cobra.Command {
 			printFleetList("no CODEOWNERS", report.MissingOwners)
 			printFleetList("no standard CI workflows", report.MissingCI)
 			printFleetList("no OpenAPI spec found", report.MissingSpec)
+			warnNotRepositories(c)
+			warnDrift(c)
 			fmt.Printf("\nstale vendored client specs: %d (greve stale)\n", report.StaleClients)
 			fmt.Printf("unresolved external systems: %d (greve unresolved)\n", len(report.UnresolvedExternal))
 			return nil

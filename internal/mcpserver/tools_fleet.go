@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -34,7 +35,62 @@ type activityOut struct {
 	Activities []gitinfo.Activity `json:"activities"`
 }
 
+// cloneDriftOut reports clones whose checkout can misrepresent the service.
+type cloneDriftOut struct {
+	Drifted         []driftRow `json:"drifted"`
+	TotalServices   int        `json:"total_services"`
+	StaleFetchCount int        `json:"stale_fetch_count"`
+	NotRepositories []string   `json:"not_repositories,omitempty"`
+}
+
+type driftRow struct {
+	Service        string `json:"service"`
+	Branch         string `json:"branch,omitempty"`
+	DefaultBranch  string `json:"default_branch,omitempty"`
+	OriginParent   string `json:"origin_parent,omitempty"`
+	WorktreeParent string `json:"worktree_parent,omitempty"`
+	OriginVerified bool   `json:"origin_verified"`
+	LastFetchDays  int    `json:"last_fetch_days"` // -1 when never fetched
+}
+
 func (s *server) addFleetTools(impl *mcp.Server) {
+	mcp.AddTool(impl, &mcp.Tool{
+		Name: "clone_drift",
+		Description: "Local clones that can misrepresent their service: a worktree whose dept44 parent differs from origin, or one that could not be verified against origin. " +
+			"Parent versions reported elsewhere are already resolved against origin/<default>, so this is about the checkout, not the catalogue. " +
+			"Read this before concluding that a service needs work from a version number.",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, cloneDriftOut, error) {
+		c := s.current()
+		out := cloneDriftOut{TotalServices: len(c.Services), Drifted: []driftRow{}}
+		for i := range c.Services {
+			svc := &c.Services[i]
+			g := svc.Git
+			days := -1
+			if !g.LastFetch.IsZero() {
+				days = int(time.Since(g.LastFetch).Hours() / 24)
+			}
+			if days < 0 || days > 7 {
+				out.StaleFetchCount++
+			}
+			if g.WorktreeParent == "" && g.OriginVerified {
+				continue
+			}
+			out.Drifted = append(out.Drifted, driftRow{
+				Service:        svc.Name,
+				Branch:         g.Branch,
+				DefaultBranch:  g.DefaultBranch,
+				OriginParent:   svc.Dept44Parent,
+				WorktreeParent: g.WorktreeParent,
+				OriginVerified: g.OriginVerified,
+				LastFetchDays:  days,
+			})
+		}
+		for _, n := range c.NotRepositories {
+			out.NotRepositories = append(out.NotRepositories, n.Name)
+		}
+		return nil, out, nil
+	})
+
 	mcp.AddTool(impl, &mcp.Tool{
 		Name:        "git_activity",
 		Description: "Git activity per repo: current branch, local branches classified by purpose (ticket/release/feature), last commit, staleness flag (no commit in 6 months).",
