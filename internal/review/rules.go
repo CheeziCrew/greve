@@ -14,6 +14,17 @@ type scanCtx struct {
 	// MigrationColumns is the Flyway-replayed schema: table -> column -> type ("varchar(255)").
 	// Lets entity rules cross-check @Column against the actual DB column.
 	MigrationColumns map[string]map[string]string
+	// BreakerInstances is the set of resilience4j.circuitbreaker.instances.<name>
+	// keys declared across the service's application*.yml, so a breaker rule can
+	// tell a tuned breaker from one silently running on framework defaults.
+	BreakerInstances map[string]bool
+	// TunesRepositoryBreaker and TunesClientBreaker record whether the service
+	// tunes at least one breaker of that kind. Most services annotate every
+	// repository and tune none of them, which is a standing choice rather than an
+	// oversight; the defect worth reporting is a breaker left untuned while a
+	// sibling of the same kind in the same service is tuned.
+	TunesRepositoryBreaker bool
+	TunesClientBreaker     bool
 }
 
 // hit is a rule match before it is stamped with rule metadata by the engine.
@@ -50,7 +61,6 @@ var (
 	rePathVarArg  = regexp.MustCompile(`@PathVariable\s*\(\s*(?:"|value\s*=|name\s*=)`)
 	reQualStatus  = regexp.MustCompile(`\bHttpStatus\.[A-Z][A-Z0-9_]+\b`)
 	reImportLine  = regexp.MustCompile(`^\s*import\s`)
-	reGenericWld  = regexp.MustCompile(`\?\s*extends\b|\?\s*super\b|<\s*\?|\?\s*>`)
 	reFqnAssertj  = regexp.MustCompile(`\borg\.assertj\.core\.(?:api\.Assertions|groups\.Tuple)\.`)
 	reFqnHamcrest = regexp.MustCompile(`\borg\.hamcrest\.MatcherAssert\.assertThat\b`)
 	reTableName   = regexp.MustCompile(`@Table\s*\(\s*name\s*=\s*"([a-z0-9_]+)"`)
@@ -71,6 +81,8 @@ var (
 	reNestedCollection    = regexp.MustCompile(`\b(?:List|Set|Collection)\s*<\s*(?:List|Set|Collection)\s*<`)
 	reTestsClass          = regexp.MustCompile(`\bclass\s+\w+Tests\b`)
 	reRequiredAttr        = regexp.MustCompile(`\brequired\b\s*=`)
+	reBreakerLiteral      = regexp.MustCompile(`@CircuitBreaker\s*\(\s*name\s*=\s*"([^"]+)"`)
+	reBreakerNamed        = regexp.MustCompile(`@CircuitBreaker\s*\(\s*name\s*=\s*"`)
 )
 
 // rules is the deterministic rule set. Every rule blocks by default
@@ -142,6 +154,52 @@ var rules = []rule{
 		},
 	},
 	{
+		ID: "circuitbreaker-untuned", CorpusID: "resilience-circuitbreaker", Default: SeverityError,
+		Title: "@CircuitBreaker name needs a resilience4j instance block",
+		check: func(f *javaFile, ctx *scanCtx) []hit {
+			// Gated on a tuned sibling of the same kind. A service that annotates
+			// every repository and tunes none has made a standing choice, and
+			// flagging all of them lights up 38 findings in one repo over a
+			// convention it never adopted. A service that tuned one repository
+			// breaker and missed the next one made a mistake, and that is what
+			// this reports.
+			isRepository := reRepoIface.MatchString(f.sanText)
+			if isRepository && !ctx.TunesRepositoryBreaker {
+				return nil
+			}
+			if !isRepository && !ctx.TunesClientBreaker {
+				return nil
+			}
+			var hits []hit
+			for i, line := range f.Sanitized {
+				// Decided on the sanitized line so a commented-out or stringified
+				// annotation stays suppressed, but read from the raw one: the
+				// sanitizer blanks string *contents*, and the breaker name is the
+				// string content. Matching the name on Sanitized captures a run of
+				// spaces, which matches no configured instance and fires on every
+				// breaker in the service, tuned or not.
+				if !reBreakerNamed.MatchString(line) {
+					// A name given as a constant (name = CLIENT_ID) is not resolved
+					// here, so it is passed over rather than guessed at.
+					continue
+				}
+				m := reBreakerLiteral.FindStringSubmatch(f.Lines[i])
+				if m == nil {
+					continue
+				}
+				if ctx.BreakerInstances[m[1]] {
+					continue
+				}
+				hits = append(hits, hit{
+					Line:    i + 1,
+					Message: "@CircuitBreaker(name = \"" + m[1] + "\") has no resilience4j.circuitbreaker.instances." + m[1] + " block — it falls back to framework defaults while its siblings in this service are tuned",
+					Fix:     "resilience4j.circuitbreaker.instances." + m[1] + ": (in application.yml)",
+				})
+			}
+			return hits
+		},
+	},
+	{
 		ID: "no-field-injection", CorpusID: "constructor-injection", Default: SeverityError,
 		Title: "Constructor injection, not @Autowired fields",
 		check: func(f *javaFile, _ *scanCtx) []hit {
@@ -172,23 +230,11 @@ var rules = []rule{
 				return nil
 			}
 			cls := strings.TrimSuffix(f.base(), ".java")
-			if ctx.TestClasses[cls+"FailureTest"] {
+			// Both spellings are fleet practice (~33 repos singular, ~29 plural), so either satisfies the pair.
+			if ctx.TestClasses[cls+"FailureTest"] || ctx.TestClasses[cls+"FailuresTest"] {
 				return nil
 			}
 			return []hit{{Line: f.classDeclLine(), Message: cls + " has no " + cls + "FailureTest — dept44 requires a {Resource}Test (happy path) + {Resource}FailureTest (validation) pair", Fix: ""}}
-		},
-	},
-	{
-		ID: "no-ternary", CorpusID: "no-ternary", Default: SeverityError,
-		Title: "No ternary operator",
-		check: func(f *javaFile, _ *scanCtx) []hit {
-			var hits []hit
-			for i, s := range f.Sanitized {
-				if looksLikeTernary(s) {
-					hits = append(hits, hit{Line: i + 1, Message: "ternary (?:) — dept44 bans it; use if/else, a helper, or Optional.map/.orElse", Fix: ""})
-				}
-			}
-			return hits
 		},
 	},
 	{
@@ -481,30 +527,4 @@ func firstMatchLine(f *javaFile, re *regexp.Regexp) int {
 		}
 	}
 	return f.classDeclLine()
-}
-
-// looksLikeTernary heuristically detects a single-line ternary: a '?' (not a
-// generic wildcard) followed later on the line by a ':' that is not part of
-// '::'. Generic wildcards (<?, ? extends, ? super, ?>) are stripped first.
-func looksLikeTernary(s string) bool {
-	t := reGenericWld.ReplaceAllString(s, " ")
-	q := strings.IndexByte(t, '?')
-	if q < 0 {
-		return false
-	}
-	rest := t[q+1:]
-	for j := 0; j < len(rest); j++ {
-		if rest[j] != ':' {
-			continue
-		}
-		if j+1 < len(rest) && rest[j+1] == ':' { // "::" method ref
-			j++
-			continue
-		}
-		if j > 0 && rest[j-1] == ':' {
-			continue
-		}
-		return true
-	}
-	return false
 }

@@ -61,17 +61,6 @@
       "linter_rule_id": "no-lombok"
     },
     {
-      "id": "no-ternary",
-      "category": "general",
-      "statement": "No ternary operator (?:) — use if/else, a helper method, or Optional",
-      "rationale": "Team standard: ternaries are banned outright in scit/dept44 Java.",
-      "bad_example": "return value == null ? \"\" : value.trim();",
-      "good_example": "return Optional.ofNullable(value).map(String::trim).orElse(\"\");",
-      "source": "CLAUDE.md",
-      "deterministic": true,
-      "linter_rule_id": "no-ternary"
-    },
-    {
       "id": "optional-over-null",
       "category": "general",
       "statement": "Prefer Optional over null checks and ternaries for nullable handling",

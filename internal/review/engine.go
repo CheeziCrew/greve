@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/CheeziCrew/greve/internal/insight"
+	"gopkg.in/yaml.v3"
 )
 
 // skipDirs are directories never walked: build output, IDE output, agent
@@ -36,7 +37,15 @@ func Run(repoPath, repoName string, opts Options, cfg Config) (Result, error) {
 		changed = ChangedFiles(repoPath, opts.Base)
 	}
 
-	ctx := &scanCtx{TestClasses: testClassNames(repoPath), MigrationColumns: migrationColumns(repoPath, repoName)}
+	instances := breakerInstances(repoPath)
+	tunesRepo, tunesClient := tunedBreakerKinds(repoPath, instances)
+	ctx := &scanCtx{
+		TestClasses:            testClassNames(repoPath),
+		MigrationColumns:       migrationColumns(repoPath, repoName),
+		BreakerInstances:       instances,
+		TunesRepositoryBreaker: tunesRepo,
+		TunesClientBreaker:     tunesClient,
+	}
 
 	// Walk the whole repo and key on the path, so multi-module reactors (whose
 	// src/main/java lives under each module, not the root) are covered — the
@@ -160,4 +169,95 @@ func relSlash(base, path string) string {
 		return filepath.ToSlash(rel)
 	}
 	return filepath.ToSlash(path)
+}
+
+// breakerInstances collects every resilience4j.circuitbreaker.instances.<name>
+// key declared in the service's application*.yml, across all modules. Used to
+// tell a @CircuitBreaker whose behaviour someone chose from one that silently
+// inherits the framework defaults. Best-effort: unreadable or unparseable yml
+// yields no names and the dependent rule simply no-ops.
+func breakerInstances(repoPath string) map[string]bool {
+	out := map[string]bool{}
+	_ = filepath.WalkDir(repoPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if skipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		name := d.Name()
+		if !strings.HasPrefix(name, "application") ||
+			(!strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml")) {
+			return nil
+		}
+		if !strings.Contains(filepath.ToSlash(path), "/src/main/resources/") {
+			return nil
+		}
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		var doc map[string]any
+		if yaml.Unmarshal(raw, &doc) != nil {
+			return nil
+		}
+		r4j, _ := doc["resilience4j"].(map[string]any)
+		cb, _ := r4j["circuitbreaker"].(map[string]any)
+		instances, _ := cb["instances"].(map[string]any)
+		for instance := range instances {
+			out[instance] = true
+		}
+		return nil
+	})
+	return out
+}
+
+// tunedBreakerKinds reports whether the service tunes at least one repository
+// breaker and whether it tunes at least one non-repository (Feign client)
+// breaker. Read by the untuned-breaker rule so it only speaks up where a tuned
+// sibling of the same kind proves the service meant to configure that kind.
+func tunedBreakerKinds(repoPath string, instances map[string]bool) (repo bool, client bool) {
+	if len(instances) == 0 {
+		return false, false
+	}
+	_ = filepath.WalkDir(repoPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if skipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".java") ||
+			!strings.Contains(filepath.ToSlash(path), "/src/main/java/") {
+			return nil
+		}
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		jf := newJavaFile(relSlash(repoPath, path), raw)
+		isRepository := reRepoIface.MatchString(jf.sanText)
+		for i, line := range jf.Sanitized {
+			if !reBreakerNamed.MatchString(line) {
+				continue
+			}
+			m := reBreakerLiteral.FindStringSubmatch(jf.Lines[i])
+			if m == nil || !instances[m[1]] {
+				continue
+			}
+			if isRepository {
+				repo = true
+			} else {
+				client = true
+			}
+		}
+		return nil
+	})
+	return repo, client
 }

@@ -32,7 +32,6 @@ func TestSanitizerSuppressesCommentsAndStrings(t *testing.T) {
 		{"commented zalando import suppressed", "// import org.zalando.problem.Problem;", "no-zalando-problem", false},
 		{"zalando in string suppressed", `String s = "import org.zalando.problem";`, "no-zalando-problem", false},
 		{"zalando in block comment suppressed", "/* import org.zalando.problem.X; */", "no-zalando-problem", false},
-		{"ternary in string suppressed", `String s = "a ? b : c";`, "no-ternary", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -44,27 +43,61 @@ func TestSanitizerSuppressesCommentsAndStrings(t *testing.T) {
 	}
 }
 
-func TestTernaryPrecision(t *testing.T) {
+// The breaker name lives in a string literal, which the sanitizer blanks. The
+// rule must decide on the sanitized line but read the name from the raw one, or
+// it captures whitespace and fires on correctly-configured breakers too.
+func TestCircuitBreakerUntuned(t *testing.T) {
+	tuned := `@CircuitBreaker(name = "tunedRepository")
+interface TunedRepository extends JpaRepository<FooEntity, String> {}`
+	untuned := `@CircuitBreaker(name = "forgottenRepository")
+interface ForgottenRepository extends JpaRepository<FooEntity, String> {}`
+	constantName := `@CircuitBreaker(name = CLIENT_ID)
+interface ConstantRepository extends JpaRepository<FooEntity, String> {}`
+	commented := `// @CircuitBreaker(name = "forgottenRepository")
+interface PlainRepository extends JpaRepository<FooEntity, String> {}`
+
+	ctx := func() *scanCtx {
+		return &scanCtx{
+			TestClasses:            map[string]bool{},
+			BreakerInstances:       map[string]bool{"tunedRepository": true},
+			TunesRepositoryBreaker: true,
+		}
+	}
+
 	cases := []struct {
+		name string
 		src  string
-		want bool
+		want int
 	}{
-		{"int x = cond ? a : b;", true},
-		{"return flag ? one() : two();", true},
-		{"Map<String, ?> m = null;", false},
-		{"List<? extends Foo> l = null;", false},
-		{"void f(Class<?> c) {}", false},
-		{"for (Foo f : foos) { run(f); }", false},
-		{"stream.map(Foo::bar).toList();", false},
-		{"case OPEN: break;", false},
+		{"configured name stays quiet", tuned, 0},
+		{"unconfigured name fires", untuned, 1},
+		{"constant name is not guessed at", constantName, 0},
+		{"commented annotation stays quiet", commented, 0},
 	}
 	for _, c := range cases {
-		t.Run(c.src, func(t *testing.T) {
-			got := fireRules(mainPath, c.src, nil)
-			if (got["no-ternary"] > 0) != c.want {
-				t.Fatalf("no-ternary fired=%v, want %v (src=%q)", got["no-ternary"] > 0, c.want, c.src)
+		t.Run(c.name, func(t *testing.T) {
+			if got := fireRules(mainPath, c.src, ctx())["circuitbreaker-untuned"]; got != c.want {
+				t.Fatalf("circuitbreaker-untuned fired %d times, want %d", got, c.want)
 			}
 		})
+	}
+
+	// A service that tunes nothing has not adopted the convention; stay silent.
+	noConfig := &scanCtx{TestClasses: map[string]bool{}, BreakerInstances: map[string]bool{}}
+	if got := fireRules(mainPath, untuned, noConfig)["circuitbreaker-untuned"]; got != 0 {
+		t.Fatalf("fired %d times in a service that tunes no breaker, want 0", got)
+	}
+
+	// Tuning only client breakers says nothing about repositories: a service that
+	// annotates every repository and tunes none made a standing choice, and
+	// flagging all of them is the noise that gets a rule switched off.
+	clientsOnly := &scanCtx{
+		TestClasses:        map[string]bool{},
+		BreakerInstances:   map[string]bool{"partyClient": true},
+		TunesClientBreaker: true,
+	}
+	if got := fireRules(mainPath, untuned, clientsOnly)["circuitbreaker-untuned"]; got != 0 {
+		t.Fatalf("fired %d times on a repository in a service that tunes only clients, want 0", got)
 	}
 }
 
@@ -205,6 +238,10 @@ func TestMissingFailureTest(t *testing.T) {
 	ctx := &scanCtx{TestClasses: map[string]bool{"DemoResourceFailureTest": true}}
 	if fireRules(res, src, ctx)["missing-failure-test"] != 0 {
 		t.Fatal("did not expect missing-failure-test when FailureTest exists")
+	}
+	plural := &scanCtx{TestClasses: map[string]bool{"DemoResourceFailuresTest": true}}
+	if fireRules(res, src, plural)["missing-failure-test"] != 0 {
+		t.Fatal("did not expect missing-failure-test when FailuresTest exists")
 	}
 }
 
