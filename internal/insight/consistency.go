@@ -68,7 +68,17 @@ func CheckConsistency(c *catalog.Catalog, s *catalog.Service) ConsistencyReport 
 		}
 		clientKeys[key] = true
 		if !ymlKeys[key] {
-			report.ClientWithoutConfig = append(report.ClientWithoutConfig, client.Package)
+			// A client bound to one installation of a multi-instance integration
+			// references a nested key (integration.sysman.sundsvall.url) while the
+			// yml declares the integration at its root (integration.sysman). Match
+			// the root before calling it drift, or every such client reads as
+			// unconfigured AND the integration reads as clientless — three false
+			// findings for one correctly-wired pair of clients.
+			if root := rootConfigKey(client.ConfigKey); root != "" && ymlKeys[root] {
+				clientKeys[root] = true
+			} else {
+				report.ClientWithoutConfig = append(report.ClientWithoutConfig, client.Package)
+			}
 		}
 	}
 	for _, integration := range s.Integrations {
@@ -192,4 +202,15 @@ func pathSegments(p string) []string {
 		}
 	}
 	return segments
+}
+
+// rootConfigKey returns the normalized first dot-segment of a Feign client's
+// integration config key: "sysman.sundsvall" -> "sysman". Empty when the key has
+// no nesting, so a single-instance client falls through to the ordinary match.
+func rootConfigKey(configKey string) string {
+	first, _, nested := strings.Cut(configKey, ".")
+	if !nested {
+		return ""
+	}
+	return catalog.Normalize(first)
 }

@@ -182,6 +182,13 @@ func circuitBreakerNames(doc map[string]any) map[string]bool {
 	instances, _ := cb["instances"].(map[string]any)
 	for name := range instances {
 		names[catalog.Normalize(name)] = true
+		// A multi-instance integration is covered by one breaker per installation
+		// ("sysman-sundsvall", "sysman-ange"), and no breaker is named for the
+		// integration itself. Registering the leading segment too keeps the edge
+		// from reporting BREAKER: no while both of its clients carry one.
+		if lead, _, nested := strings.Cut(name, "-"); nested {
+			names[catalog.Normalize(lead)] = true
+		}
 	}
 	return names
 }

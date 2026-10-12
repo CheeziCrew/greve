@@ -38,7 +38,12 @@ func LoadCoverage(s *catalog.Service) *CoverageReport {
 
 	var stubText strings.Builder
 	for _, e := range entries {
-		if !e.IsDir() || !strings.HasSuffix(e.Name(), "IT") {
+		// Keyed on the suite having WireMock fixtures rather than on its directory
+		// being named <Something>IT. @WireMockAppTestSuite(files = ...) names the
+		// directory freely — api-service-supportcenter points its end-of-lease
+		// suites at "EndOfLeaseDispatch/" — and requiring the IT suffix made every
+		// stub in such a suite invisible, reporting its integrations as untested.
+		if !e.IsDir() || !hasWireMockFixtures(filepath.Join(root, e.Name())) {
 			continue
 		}
 		suite := ITClass{Name: e.Name(), Scenarios: []string{}}
@@ -75,4 +80,32 @@ func LoadCoverage(s *catalog.Service) *CoverageReport {
 	sort.Strings(report.CoveredIntegrations)
 	sort.Strings(report.UncoveredIntegrations)
 	return report
+}
+
+// hasWireMockFixtures reports whether a directory under integration-test
+// resources is a WireMock suite, i.e. holds a __files or mappings subdirectory.
+// Distinguishes a suite from the other things that live beside it (db/scripts,
+// junit config) without relying on a naming convention.
+func hasWireMockFixtures(dir string) bool {
+	for _, marker := range []string{"__files", "mappings"} {
+		if info, err := os.Stat(filepath.Join(dir, marker)); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	// Scenario directories may carry the markers one level down.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		for _, marker := range []string{"__files", "mappings"} {
+			if info, err := os.Stat(filepath.Join(dir, e.Name(), marker)); err == nil && info.IsDir() {
+				return true
+			}
+		}
+	}
+	return false
 }

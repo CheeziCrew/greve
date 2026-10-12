@@ -70,12 +70,15 @@ func FindPatternExamples(c *catalog.Catalog, patternType string) []PatternExampl
 
 	var examples []PatternExample
 	for _, s := range ranked {
-		for _, example := range finder(s) {
-			examples = append(examples, example)
-			if len(examples) == maxPatternExamples {
-				return examples
-			}
-			break // one example per service keeps the set diverse
+		found := finder(s)
+		if len(found) == 0 {
+			continue
+		}
+		// Only the first hit per service; a spread across services is more
+		// useful as a pattern reference than several examples from one repo.
+		examples = append(examples, found[0])
+		if len(examples) == maxPatternExamples {
+			return examples
 		}
 	}
 	return examples
